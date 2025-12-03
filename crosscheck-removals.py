@@ -16,11 +16,10 @@ Script for checking if adopets profiles removed in the last day correspond to ou
 '''
 
 import os
-from datetime import datetime, time
+from datetime import datetime
 import requests
 import json
 from pathlib import Path
-import argparse
 import re
 import pandas as pd
 
@@ -123,19 +122,17 @@ def formatSpeciesDF(df):
 
     return df
 
-SNAP_TS_PATTERN = re.compile(
-    r"(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})"
-)
+SNAP_TS_PATTERN = re.compile(r"(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})")
 
-def parse_snapshot_dt(path: str) -> datetime:
+def parse_snapshot_dt(path_str: str) -> datetime:
     """
-    Extract datetime from a snapshot filename such as:
+    Extract a datetime from a snapshot filename such as:
       'snapshots/2025-12-03T09-17-03.json'
     Returns a datetime object.
     """
-    m = SNAP_TS_PATTERN.search(path)
+    m = SNAP_TS_PATTERN.search(path_str)
     if not m:
-        raise ValueError(f"Could not parse timestamp from snapshot path: {path}")
+        raise ValueError(f"Could not parse timestamp from snapshot path: {path_str}")
     date_str, hh, mm, ss = m.groups()
     iso = f"{date_str}T{hh}:{mm}:{ss}"
     return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S")
@@ -143,37 +140,11 @@ def parse_snapshot_dt(path: str) -> datetime:
 def find_latest_diff(snapshots_dir: Path = Path("snapshots")) -> Path | None:
     """
     Find the most recent diff_*.json in the snapshots directory by filename.
-    Assumes names like: diff_YYYY-MM-DD_to_YYYY-MM-DD.json
     """
     diffs = sorted(snapshots_dir.glob("diff_*.json"))
     if not diffs:
         return None
     return diffs[-1]
-
-def parse_dates_from_diff_name(path: Path) -> tuple[str, str]:
-    """
-    Given a filename like 'diff_2025-12-02T15-26-56_to_2025-12-03T15-26-56.json',
-    return ('2025-12-02T15-26-56', '2025-12-03T15-26-56').
-    """
-    # Load diff JSON:
-    with open(path, "r", encoding="utf-8") as f:
-        diff = json.load(f)
-
-    meta = diff.get("meta", {})
-    old_snap = meta.get("old_snapshot")
-    new_snap = meta.get("new_snapshot")
-
-    if not old_snap or not new_snap:
-        raise RuntimeError("Diff file is missing 'old_snapshot' or 'new_snapshot' in meta")
-
-    old_dt = parse_snapshot_dt(old_snap)
-    new_dt = parse_snapshot_dt(new_snap)
-    return old_dt, new_dt
-    # # Convert to strings like '2025-12-02T00:00:00' for getOutcomes
-    # start_str = old_dt.strftime("%Y-%m-%dT%H:%M:%S")
-    # end_str   = new_dt.strftime("%Y-%m-%dT%H:%M:%S")
-    # return start_str, end_str
-
 
 def load_diff(diff_path: Path) -> dict:
     with diff_path.open("r", encoding="utf-8") as f:
@@ -239,35 +210,38 @@ def main():
     diff_path = find_latest_diff(snapshots_dir)
     if diff_path is None:
         raise SystemExit("No diff_*.json files found in snapshots/ directory.")
-
     print(f"Using diff file: {diff_path.name}")
 
+    # 2) Load diff JSON
+    with diff_path.open("r", encoding="utf-8") as f:
+        diff = json.load(f)
+    old_snap = diff.get("old_snapshot")
+    new_snap = diff.get("new_snapshot")
+    if not old_snap or not new_snap:
+        raise RuntimeError(
+            "Diff file is missing 'old_snapshot' or 'new_snapshot' at top level.\n"
+            f"Keys present: {list(diff.keys())}"
+        )
 
-    # 2) Parse dates (usually yesterday and today)
-    old_dt, new_dt = parse_dates_from_diff_name(diff_path)
-    print(f"Old snapshot date: {old_dt} | New snapshot date: {new_dt}")
-
+    # 3) Parse dates (usually yesterday and today)
+    old_dt = parse_snapshot_dt(old_snap)
+    new_dt = parse_snapshot_dt(new_snap)
     # Convert to strings like '2025-12-02T00:00:00' for getOutcomes:
     start_str = old_dt.strftime("%Y-%m-%dT%H:%M:%S")
     end_str   = new_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-
-    # 3) Get outcomes for OLD date (yesterday)
+    # 4) Get outcomes for OLD date (yesterday)
     print(f"Fetching outcomes from city DB between {start_str} and {end_str}...")
     outcomes_df = getOutcomes(start_str, end_str)
     print(outcomes_df.columns)
-    print(f"Got {len(outcomes_df)} outcome rows for {old_date_str}")
-
-
-    # 4) Normalize columns & attach statuses
-    diff = load_diff(diff_path)
-    enriched = attach_outcome_status(diff, outcomes_df)
-
+    print(f"Got {len(outcomes_df)} outcome rows.")
+    enriched = attach_outcome_status(diff, outcomes_df) # attach outcome types
 
     # 5) Save back in-place (so everything else just reads the same diff)
     with diff_path.open("w", encoding="utf-8") as f:
         json.dump(enriched, f, indent=2, ensure_ascii=False)
 
+    # 6) Generate summary
     summary = enriched.get("removal_outcome_summary_simple", {})
     print("Cross-check complete.")
     print(f"- Total removed: {summary.get('total_removed', 0)}")
