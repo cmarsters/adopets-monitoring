@@ -4,11 +4,20 @@ import json
 from pathlib import Path
 import argparse
 import os
+from dotenv import load_dotenv
 import smtplib
 from email.message import EmailMessage
 from datetime import datetime
 from textwrap import shorten
 
+load_dotenv()  # loads .env when running locally; harmless in Actions
+
+SMTP_HOST = os.environ["SMTP_HOST"]
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+AAC_EMAIL_FROM = os.environ["EMAIL_USER"]
+AAC_EMAIL_USER = os.environ["EMAIL_USER"]
+AAC_EMAIL_PASS = os.environ["EMAIL_PASS"]
+AAC_EMAIL_TO   = os.environ["EMAIL_TO"]
 
 def load_diff(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as f:
@@ -190,18 +199,11 @@ def main():
     diff = load_diff(diff_path)
     body = build_email_body(diff)
 
-    # --- CONFIG via environment variables ---
-    # These should be set in your shell or venv activation:
-    #   export AAC_EMAIL_FROM="youremail@gmail.com"
-    #   export AAC_EMAIL_TO="you@example.com,other@example.com"
-    #   export AAC_EMAIL_USER="youremail@gmail.com"
-    #   export AAC_EMAIL_PASS="your_app_password"
-    # Optionally:
-    #   export AAC_EMAIL_SUBJECT_PREFIX="[AAC Adopets]"
-    from_addr = os.environ.get("AAC_EMAIL_FROM")
-    to_env = os.environ.get("AAC_EMAIL_TO")
-    username = os.environ.get("AAC_EMAIL_USER", from_addr)
-    password = os.environ.get("AAC_EMAIL_PASS")
+    # Email configuration (loaded from env)
+    from_addr = AAC_EMAIL_FROM
+    to_env = AAC_EMAIL_TO
+    username = AAC_EMAIL_USER
+    password = AAC_EMAIL_PASS
     subject_prefix = os.environ.get("AAC_EMAIL_SUBJECT_PREFIX", "[AAC Adopets]")
 
     if not from_addr or not to_env or not password:
@@ -214,11 +216,11 @@ def main():
 
     old_label = extract_date_from_filename(diff.get("old_snapshot", ""))
     new_label = extract_date_from_filename(diff.get("new_snapshot", ""))
-    subject = f"{subject_prefix} Changes from {old_label} to {new_label}"
+    subject = f"{subject_prefix} Adopets changes from {old_label} to {new_label}"
 
     # For Gmail; adjust if you use another provider
-    smtp_host = "smtp.gmail.com"
-    smtp_port = 587
+    smtp_host = SMTP_HOST or "smtp.gmail.com"
+    smtp_port = SMTP_PORT or 587
 
     send_email(
         subject=subject,
