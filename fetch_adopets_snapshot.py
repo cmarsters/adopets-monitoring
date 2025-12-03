@@ -140,8 +140,8 @@ def normalize_record(list_item: dict, detail_data: dict) -> dict:
             char_names.append(name)
 
     return {
-        "id": org_pet_list.get("uuid"),
-        "code": org_pet_list.get("code"),
+        "uuid": org_pet_list.get("uuid"),
+        "animal_id": org_pet_list.get("code"),
         "name": org_pet_list.get("name"),
         "status": org_pet_list.get("status_key"),
         "foster": org_pet_list.get("foster"),

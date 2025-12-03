@@ -13,7 +13,7 @@ def load_snapshot(path: Path):
 
     by_id = {}
     for rec in records:
-        pet_id = rec.get("id")
+        pet_id = rec.get("animal_id")
         if not pet_id:
             continue
         by_id[pet_id] = rec
@@ -21,7 +21,7 @@ def load_snapshot(path: Path):
 
 
 def normalize_html(text: str | None) -> str:
-    """Normalize description text for comparison (very simple for now)."""
+    """Normalize description text for comparison."""
     if text is None:
         return ""
     # Strip leading/trailing whitespace and collapse internal whitespace a bit
@@ -48,8 +48,8 @@ def compare_snapshots(old_path: Path, new_path: Path) -> dict:
         rec = new_data[pid]
         animals_added.append(
             {
-                "id": rec.get("id"),
-                "code": rec.get("code"),
+                "uuid": rec.get("uuid"),
+                "animal_id": rec.get("animal_id"),
                 "name": rec.get("name"),
                 "status": rec.get("status"),
                 "sex": rec.get("sex"),
@@ -63,8 +63,8 @@ def compare_snapshots(old_path: Path, new_path: Path) -> dict:
         rec = old_data[pid]
         animals_removed.append(
             {
-                "id": rec.get("id"),
-                "code": rec.get("code"),
+                "uuid": rec.get("uuid"),
+                "animal_id": rec.get("animal_id"),
                 "name": rec.get("name"),
                 "status": rec.get("status"),
                 "sex": rec.get("sex"),
@@ -98,7 +98,7 @@ def compare_snapshots(old_path: Path, new_path: Path) -> dict:
             animals_changed.append(
                 {
                     "uuid": pid,
-                    "animal_id": new.get("code", old.get("code")),
+                    "animal_id": new.get("animal_id", old.get("animal_id")),
                     "name": new.get("name", old.get("name")),
                     "status_old": old.get("status"),
                     "status_new": new.get("status"),

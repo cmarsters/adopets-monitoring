@@ -35,14 +35,14 @@ def extract_date_from_filename(path: str) -> str:
 
 
 def one_line(rec: dict) -> str:
-    """One-line dog summary."""
-    code = rec.get("code", "?")
+    """One-line animal summary."""
+    animal_id = rec.get("animal_id", "?")
     name = rec.get("name", "?")
     sex = rec.get("sex") or rec.get("sex_key") or "?"
     age = rec.get("age_key") or "?"
     size = rec.get("size_key") or "?"
     status = rec.get("status") or rec.get("status_new") or rec.get("status_old") or "?"
-    return f"[{code}] {name} ({sex}, {age}, {size}, {status})"
+    return f"[{animal_id}] {name} ({sex}, {age}, {size}, {status})"
 
 
 def build_email_body(diff: dict) -> str:
@@ -55,9 +55,9 @@ def build_email_body(diff: dict) -> str:
     new_label = extract_date_from_filename(diff.get("new_snapshot", ""))
 
     # Split changed into buckets
-    trait_loss = []      # dogs that LOST at least one trait
-    trait_gain_only = [] # dogs that only gained traits
-    bio_changes = []     # dogs with bio changes
+    trait_loss = []      # animals that LOST at least one trait
+    trait_gain_only = [] # animals that only gained traits
+    bio_changes = []     # animals with bio changes
 
     for rec in animals_changed:
         added = set(rec.get("characteristics_added") or [])
@@ -87,7 +87,7 @@ def build_email_body(diff: dict) -> str:
     lines.append("")
 
     # 1) Trait losses (main thing you care about)
-    lines.append("DOGS THAT LOST TRAITS (most important):")
+    lines.append("ANIMALS THAT LOST TRAITS (most important):")
     if trait_loss:
         for rec in trait_loss:
             lines.append(f"- {one_line(rec)}")
@@ -104,8 +104,8 @@ def build_email_body(diff: dict) -> str:
     lines.append("=" * 60)
     lines.append("")
 
-    # 2) New dogs
-    lines.append("NEW DOGS ADDED:")
+    # 2) New animals
+    lines.append("NEW ANIMALS ADDED:")
     if animals_added:
         for rec in animals_added:
             lines.append(f"- {one_line(rec)}")
@@ -114,8 +114,8 @@ def build_email_body(diff: dict) -> str:
         lines.append("  None.")
         lines.append("")
 
-    # 3) Dogs removed (adopted, transferred, etc.)
-    lines.append("DOGS REMOVED FROM THIS SNAPSHOT:")
+    # 3) Animals removed (adopted, transferred, etc.)
+    lines.append("ANIMALS REMOVED FROM THIS SNAPSHOT:")
     if animals_removed:
         for rec in animals_removed:
             lines.append(f"- {one_line(rec)}")
@@ -124,8 +124,8 @@ def build_email_body(diff: dict) -> str:
         lines.append("  None.")
         lines.append("")
 
-    # 4) Dogs with only trait gains (nice to know, but less urgent)
-    lines.append("DOGS THAT ONLY GAINED TRAITS:")
+    # 4) Animals with only trait gains (nice to know, but less urgent)
+    lines.append("ANIMALS THAT ONLY GAINED TRAITS:")
     if trait_gain_only:
         for rec in trait_gain_only:
             lines.append(f"- {one_line(rec)}")
@@ -137,7 +137,7 @@ def build_email_body(diff: dict) -> str:
         lines.append("")
 
     # 5) Bio changes (just show a snippet of the new bio)
-    lines.append("DOGS WITH BIO CHANGES:")
+    lines.append("ANIMALS WITH BIO CHANGES:")
     if bio_changes:
         for rec in bio_changes:
             lines.append(f"- {one_line(rec)}")

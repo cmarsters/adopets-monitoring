@@ -119,7 +119,7 @@ def make_markdown_report(diff: dict) -> str:
 
             lines.append("")  # blank line after each animal
     else:
-        lines.append("_No trait changes._")
+        lines.append("None")
         lines.append("")
 
     # Bio changes
