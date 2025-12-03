@@ -123,7 +123,22 @@ def formatSpeciesDF(df):
 
     return df
 
+SNAP_TS_PATTERN = re.compile(
+    r"(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})"
+)
 
+def parse_snapshot_dt(path: str) -> datetime:
+    """
+    Extract datetime from a snapshot filename such as:
+      'snapshots/2025-12-03T09-17-03.json'
+    Returns a datetime object.
+    """
+    m = SNAP_TS_PATTERN.search(path)
+    if not m:
+        raise ValueError(f"Could not parse timestamp from snapshot path: {path}")
+    date_str, hh, mm, ss = m.groups()
+    iso = f"{date_str}T{hh}:{mm}:{ss}"
+    return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S")
 
 def find_latest_diff(snapshots_dir: Path = Path("snapshots")) -> Path | None:
     """
@@ -137,18 +152,27 @@ def find_latest_diff(snapshots_dir: Path = Path("snapshots")) -> Path | None:
 
 def parse_dates_from_diff_name(path: Path) -> tuple[str, str]:
     """
-    Given a filename like 'diff_2025-12-01_to_2025-12-02.json',
-    return ('2025-12-01', '2025-12-02').
-
-    We only really need the *old* date (index 0) for outcomes.
+    Given a filename like 'diff_2025-12-02T15-26-56_to_2025-12-03T15-26-56.json',
+    return ('2025-12-02T15-26-56', '2025-12-03T15-26-56').
     """
-    m = re.search(r"diff_(\d{4}-\d{2}-\d{2})_to_(\d{4}-\d{2}-\d{2})", path.name)
-    if not m:
-        raise RuntimeError(
-            f"Could not parse dates from diff filename: {path.name}. "
-            "Expected something like diff_YYYY-MM-DD_to_YYYY-MM-DD.json"
-        )
-    return m.group(1), m.group(2)
+    # Load diff JSON:
+    with open(path, "r", encoding="utf-8") as f:
+        diff = json.load(f)
+
+    meta = diff.get("meta", {})
+    old_snap = meta.get("old_snapshot")
+    new_snap = meta.get("new_snapshot")
+
+    if not old_snap or not new_snap:
+        raise RuntimeError("Diff file is missing 'old_snapshot' or 'new_snapshot' in meta")
+
+    old_dt = parse_snapshot_dt(old_snap)
+    new_dt = parse_snapshot_dt(new_snap)
+    return old_dt, new_dt
+    # # Convert to strings like '2025-12-02T00:00:00' for getOutcomes
+    # start_str = old_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    # end_str   = new_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    # return start_str, end_str
 
 
 def load_diff(diff_path: Path) -> dict:
@@ -219,19 +243,18 @@ def main():
     print(f"Using diff file: {diff_path.name}")
 
 
-    # 2) Parse OLD date (usually yesterday)
-    old_date_str, new_date_str = parse_dates_from_diff_name(diff_path)
-    print(f"Old snapshot date: {old_date_str} | New snapshot date: {new_date_str}")
+    # 2) Parse dates (usually yesterday and today)
+    old_dt, new_dt = parse_dates_from_diff_name(diff_path)
+    print(f"Old snapshot date: {old_dt} | New snapshot date: {new_dt}")
 
-    day = datetime.strptime(old_date_str, "%Y-%m-%d").date()
-    start_dt = datetime.combine(day, time.min).strftime("%Y-%m-%dT%H:%M:%S")
-    end_dt = datetime.combine(day, time.max).strftime("%Y-%m-%dT%H:%M:%S")
-
-    print(f"Fetching outcomes from city DB between {start_dt} and {end_dt}...")
+    # Convert to strings like '2025-12-02T00:00:00' for getOutcomes:
+    start_str = old_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    end_str   = new_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
 
     # 3) Get outcomes for OLD date (yesterday)
-    outcomes_df = getOutcomes(start_dt, end_dt)
+    print(f"Fetching outcomes from city DB between {start_str} and {end_str}...")
+    outcomes_df = getOutcomes(start_str, end_str)
     print(outcomes_df.columns)
     print(f"Got {len(outcomes_df)} outcome rows for {old_date_str}")
 
