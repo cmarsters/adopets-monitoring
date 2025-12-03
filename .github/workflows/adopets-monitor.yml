@@ -1,0 +1,89 @@
+name: Adopets daily monitoring
+
+on:
+  schedule:
+    # Every day at 13:00 UTC (adjust if you want)
+    - cron: "0 13 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write  # allow the workflow to commit snapshots back to the repo
+
+jobs:
+  daily-monitoring:
+    runs-on: ubuntu-latest
+
+    env:
+      AAC_EMAIL_FROM: ${{ secrets.AAC_EMAIL_FROM }}
+      AAC_EMAIL_TO: ${{ secrets.AAC_EMAIL_TO }}
+      AAC_EMAIL_USER: ${{ secrets.AAC_EMAIL_USER }}
+      AAC_EMAIL_PASS: ${{ secrets.AAC_EMAIL_PASS }}
+      AAC_EMAIL_SUBJECT_PREFIX: ${{ secrets.AAC_EMAIL_SUBJECT_PREFIX }}
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run snapshot script (today's snapshot)
+        run: |
+          python fetch_adopets_snapshot.py
+
+      - name: Build diff vs previous snapshot
+        run: |
+          python - << 'PY'
+          import json
+          from pathlib import Path
+          from compare_snapshots import compare_snapshots
+
+          snaps = sorted(Path("snapshots").glob("*.json"))
+          if len(snaps) < 2:
+              print("Not enough snapshots to compare; skipping diff/email.")
+              raise SystemExit(0)
+
+          old_path = snaps[-2]
+          new_path = snaps[-1]
+
+          diff = compare_snapshots(old_path, new_path)
+
+          out_path = Path("snapshots/latest_diff.json")
+          out_path.write_text(
+              json.dumps(diff, indent=2, ensure_ascii=False),
+              encoding="utf-8"
+          )
+          print(f"Created diff for {old_path} -> {new_path} at {out_path}")
+          PY
+
+      - name: Send email summary
+        run: |
+          if [ -f "snapshots/latest_diff.json" ]; then
+            python email_adopets_changes.py snapshots/latest_diff.json
+          else
+            echo "No diff file found; skipping email."
+          fi
+
+      - name: Commit new snapshot
+        run: |
+          # Configure git identity for this action
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Stage new snapshots (but latest_diff.json is ignored by .gitignore)
+          git add snapshots/*.json
+
+          # Only commit if there are changes (i.e., new snapshot created)
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Add snapshot for $(date -u +'%Y-%m-%d')"
+            git push
+          fi
