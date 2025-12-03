@@ -3,7 +3,7 @@ name: Adopets daily monitoring
 on:
   schedule:
     # Every day at 13:00 UTC (adjust if you want)
-    - cron: "0 13 * * *"
+    - cron: "0 10 * * *"
   workflow_dispatch: {}
 
 permissions:
