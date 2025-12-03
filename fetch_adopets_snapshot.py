@@ -185,8 +185,9 @@ def main():
                 idx, record = future.result()
                 records[idx] = record
 
-    today = datetime.now().strftime("%Y-%m-%d")
-    out_path = SNAPSHOT_DIR / f"{today}.json"
+    now = datetime.now()
+    stamp = now.strftime("%Y-%m-%dT%H-%M-%S")  # e.g. 2025-12-03T14-52-10
+    out_path = SNAPSHOT_DIR / f"{stamp}.json"
 
     with out_path.open("w", encoding="utf-8") as f:
         json.dump(records, f, indent=2, ensure_ascii=False)
