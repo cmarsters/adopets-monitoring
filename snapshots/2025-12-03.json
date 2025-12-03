@@ -6593,7 +6593,7 @@
     "foster": true,
     "sex": "FEMALE",
     "age_key": "BABY",
-    "size_key": "XS",
+    "size_key": "S",
     "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/20251020_025637_17609289977381.jpeg",
     "description_html": "<p><span style=\"color: black;\">Meet Anya! Our resident pretty little potato princess. This little girl loooves to be pampered - food, treats, play, pets, cuddles, you name it!</span></p><p><span style=\"color: black;\">&nbsp;</span></p><p><span style=\"color: black;\">Anya is&nbsp;very sweet-tempered and easy to handle. She's a very independent kitten who will happily play on her own, but don't let that fool you - she loves being pet and snuggling with her foster mom at night. She's a bit timid and skittish in new situations but will always come out for a treat or toy. Once she gets comfortable, she'll happily spend the day scampering around (she seems to bounce more often than walk...) in between cozy naps in choice locations.</span></p><p><span style=\"color: black;\">&nbsp;</span></p><p><span style=\"color: black;\">Anya is curious and playful around her foster mom's two cats while always respecting their boundaries. When they tell her no, she's happy to give them their space and play on her own. Given her easy-going and gentle nature, she could also be a good fit for households with children who have the patience to gain her trust, as she doesn't mind being picked up or touched anywhere and, when needed, is very vocal about her needs or dislikes.</span></p>",
     "characteristic_keys": [
@@ -9798,28 +9798,6 @@
     ]
   },
   {
-    "id": "f51eff94-1a63-48c7-833b-f6a6bfd31da4",
-    "code": "17840",
-    "name": "Dove",
-    "status": "AVAILABLE",
-    "foster": false,
-    "sex": "FEMALE",
-    "age_key": "YOUNG",
-    "size_key": "M",
-    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/20251010_16490_1762793340873.jpeg",
-    "description_html": "<p>Mira and Dove are shy girls who came into the shelter as young stray kittens. They seem to rely on each other and love each other, so they may do well in a home together, but it is not required. These girls enjoys treats and pets, you just have to go slowly and give them some time to open up. They are still learning that the shelter doesn't have to be a scary place, but we think they will truly blossom once they are in a quiet home. Mira and Dove are members of our Cactus Cat program for shy cats who need a little encouragement.</p><p><br></p><p>The fee is waived for these special girls and all Cactus Cats.</p>",
-    "characteristic_keys": [
-      "CAT_COMPATIBLE",
-      "LOVES_FOOD_TREATS",
-      "QUIET_HOME"
-    ],
-    "characteristic_names": [
-      "Experienced with Cats",
-      "Loves Food & Treats ",
-      "Quiet Home"
-    ]
-  },
-  {
     "id": "e8a8b95c-780a-472a-911b-bf1752ebeb94",
     "code": "17833",
     "name": "Bobo",
@@ -9980,20 +9958,6 @@
       "Medium Energy",
       "Playful"
     ]
-  },
-  {
-    "id": "31138a38-333a-4565-8c4e-2de722cd518c",
-    "code": "16502",
-    "name": "Frodo",
-    "status": "AVAILABLE",
-    "foster": false,
-    "sex": "MALE",
-    "age_key": "ADULT",
-    "size_key": "S",
-    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/20251012_1498_1762956548585.jpeg",
-    "description_html": null,
-    "characteristic_keys": [],
-    "characteristic_names": []
   },
   {
     "id": "ff159937-a073-4e8e-9084-5e0c5f349c09",
@@ -11748,10 +11712,18 @@
     "sex": "MALE",
     "age_key": "SENIOR",
     "size_key": "L",
-    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/20251126_235759_17642014797709.jpeg",
+    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/20251203_174332_1764783812994.jpeg",
     "description_html": null,
-    "characteristic_keys": [],
-    "characteristic_names": []
+    "characteristic_keys": [
+      "HOUSETRAINED",
+      "LOW_ENERGY",
+      "LEASH_TRAINED"
+    ],
+    "characteristic_names": [
+      "Housetrained",
+      "Laid Back",
+      "Leash Trained "
+    ]
   },
   {
     "id": "877366b3-a389-4272-9092-9e52a79e1dbc",
@@ -11791,20 +11763,6 @@
     "age_key": "BABY",
     "size_key": "XS",
     "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/20251026_222345_1764195825107.jpeg",
-    "description_html": null,
-    "characteristic_keys": [],
-    "characteristic_names": []
-  },
-  {
-    "id": "f2c78a43-fa51-4476-8ce8-40168afbf730",
-    "code": "18429",
-    "name": "Evergreen",
-    "status": "AVAILABLE",
-    "foster": false,
-    "sex": "FEMALE",
-    "age_key": "BABY",
-    "size_key": "S",
-    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/20251029_171017_1764436217000.jpeg",
     "description_html": null,
     "characteristic_keys": [],
     "characteristic_names": []
@@ -12601,6 +12559,76 @@
     "age_key": "ADULT",
     "size_key": "S",
     "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/2025113_16449_1764777889950.jpeg",
+    "description_html": null,
+    "characteristic_keys": [],
+    "characteristic_names": []
+  },
+  {
+    "id": "efdb4925-4173-4e15-b6b7-7014e40dff03",
+    "code": "18693",
+    "name": "18693",
+    "status": "AVAILABLE",
+    "foster": false,
+    "sex": "MALE",
+    "age_key": "YOUNG",
+    "size_key": null,
+    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/2025113_172216_1764782536317.jpeg",
+    "description_html": null,
+    "characteristic_keys": [],
+    "characteristic_names": []
+  },
+  {
+    "id": "403f7dd7-fdb6-491d-9e02-f1e5570ec8d0",
+    "code": "18627",
+    "name": "18627",
+    "status": "AVAILABLE",
+    "foster": false,
+    "sex": "FEMALE",
+    "age_key": null,
+    "size_key": null,
+    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/2025113_172216_1764782536345.jpeg",
+    "description_html": null,
+    "characteristic_keys": [],
+    "characteristic_names": []
+  },
+  {
+    "id": "a9463827-25fe-4dd2-9d63-307b4aeda467",
+    "code": "18628",
+    "name": "18628",
+    "status": "AVAILABLE",
+    "foster": false,
+    "sex": "MALE",
+    "age_key": null,
+    "size_key": null,
+    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/2025113_172216_1764782536757.jpeg",
+    "description_html": null,
+    "characteristic_keys": [],
+    "characteristic_names": []
+  },
+  {
+    "id": "f0c6844a-5e69-4bde-8c69-64c4f31e50ba",
+    "code": "18874",
+    "name": "Kittykat",
+    "status": "AVAILABLE",
+    "foster": false,
+    "sex": "UNKNOWN",
+    "age_key": null,
+    "size_key": null,
+    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/2025113_174759_1764784079179.jpeg",
+    "description_html": null,
+    "characteristic_keys": [],
+    "characteristic_names": []
+  },
+  {
+    "id": "2af35db1-538d-426c-aa57-37e96e8db31c",
+    "code": "18875",
+    "name": "Kittykat 2",
+    "status": "AVAILABLE",
+    "foster": false,
+    "sex": "UNKNOWN",
+    "age_key": null,
+    "size_key": null,
+    "picture": "https://img.prd.adopets.app/ado-resize-image-prd?path=organization/pet/picture/AUTOx400/2025113_174759_1764784079608.jpeg",
     "description_html": null,
     "characteristic_keys": [],
     "characteristic_names": []
