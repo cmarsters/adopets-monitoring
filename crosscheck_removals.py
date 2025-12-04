@@ -173,22 +173,25 @@ def parse_snapshot_dt(path_str: str) -> datetime:
     return datetime.strptime(iso, "%Y-%m-%dT%H:%M:%S")
 
 
-def find_latest_diff(snapshots_dir: Path | None = None) -> Path | None:
+def find_latest_diff(snapshots_dir: Path) -> Path | None:
     """
-    Find the most recent diff_*.json in the given snapshots directory by filename.
-    If snapshots_dir is None, uses SNAPSHOT_DIR.
+    Find the most recent diff JSON in the snapshots directory.
+
+    Preference order:
+      1) Highest-sorting diff_*.json
+      2) snapshots/latest_diff.json
     """
-    if snapshots_dir is None:
-        snapshots_dir = SNAPSHOT_DIR
-    diffs = sorted(snapshots_dir.glob("diff_*.json"))
-    if not diffs:
-        return None
-    return diffs[-1]
+    # 1) Look for timestamped diffs like diff_2025-12-04T09-55-19_to_...
+    timestamped = sorted(snapshots_dir.glob("diff_*.json"))
+    if timestamped:
+        return timestamped[-1]
 
+    # 2) Fallback: latest_diff.json (used by GitHub Actions)
+    latest = snapshots_dir / "latest_diff.json"
+    if latest.is_file():
+        return latest
 
-def load_diff(diff_path: Path) -> dict:
-    with diff_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+    return None
 
 
 def attach_outcome_status(diff: dict, outcomes_df: pd.DataFrame) -> dict:
@@ -243,16 +246,42 @@ def attach_outcome_status(diff: dict, outcomes_df: pd.DataFrame) -> dict:
 
 
 def main():
-    # 1) Get most recent diff file from SNAPSHOT_DIR
-    diff_path = find_latest_diff()
-    if diff_path is None:
-        raise SystemExit(
-            f"No diff_*.json files found in snapshots directory: {SNAPSHOT_DIR}"
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description=(
+            "Cross-check removed Adopets profiles against city outcomes.\n"
+            "If no diff_json is given, uses the latest diff in SNAPSHOT_DIR."
         )
-    print(f"Using diff file: {diff_path.name}")
+    )
+    parser.add_argument(
+        "diff_json",
+        nargs="?",
+        type=Path,
+        help="Path to diff JSON (default: latest diff in snapshots dir)",
+    )
+
+    args = parser.parse_args()
+
+    # Decide which diff file to use
+    if args.diff_json is not None:
+        diff_path = args.diff_json
+        if not diff_path.is_file():
+            raise SystemExit(f"Diff file not found: {diff_path}")
+    else:
+        diff_path = find_latest_diff(SNAPSHOT_DIR)
+        if diff_path is None:
+            raise SystemExit(
+                f"No diff_*.json or latest_diff.json files found in snapshots "
+                f"directory: {SNAPSHOT_DIR}"
+            )
+
+    print(f"Using diff file: {diff_path}")
 
     # 2) Load diff JSON
-    diff = load_diff(diff_path)
+    with diff_path.open("r", encoding="utf-8") as f:
+        diff = json.load(f)
+
     old_snap = diff.get("old_snapshot")
     new_snap = diff.get("new_snapshot")
     if not old_snap or not new_snap:
@@ -261,22 +290,19 @@ def main():
             f"Keys present: {list(diff.keys())}"
         )
 
-    # 3) Parse dates from snapshot filenames
+    # 3) Parse dates (usually yesterday and today)
     old_dt = parse_snapshot_dt(old_snap)
     new_dt = parse_snapshot_dt(new_snap)
-
-    # Convert to strings like '2025-12-02T00:00:00' for getOutcomes:
     start_str = old_dt.strftime("%Y-%m-%dT%H:%M:%S")
-    end_str = new_dt.strftime("%Y-%m-%dT%H:%M:%S")
+    end_str   = new_dt.strftime("%Y-%m-%dT%H:%M:%S")
 
-    # 4) Get outcomes between these datetimes
+    # 4) Get outcomes for that window
     print(f"Fetching outcomes from city DB between {start_str} and {end_str}...")
     outcomes_df = getOutcomes(start_str, end_str)
     print(f"Got {len(outcomes_df)} outcome rows.")
-
     enriched = attach_outcome_status(diff, outcomes_df)
 
-    # 5) Save back in-place (so everything else just reads the same diff)
+    # 5) Save back in-place
     with diff_path.open("w", encoding="utf-8") as f:
         json.dump(enriched, f, indent=2, ensure_ascii=False)
 
