@@ -14,6 +14,9 @@ from html import escape
 
 load_dotenv()  # loads .env when running locally; harmless in Actions
 
+SNAPSHOT_DIR = Path(os.environ.get("SNAPSHOT_DIR", "snapshots"))
+SNAPSHOT_DIR.mkdir(exist_ok=True)
+
 def extract_date_from_filename(path: str) -> str:
     """
     Extract YYYY-MM-DD from a filename and format it as 'Dec 2, 2025'.
@@ -607,15 +610,29 @@ def send_email(
         server.login(username, password)
         server.send_message(msg)
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="Email a human-readable summary of Adopets changes."
     )
-    parser.add_argument("diff_json", type=Path, help="Path to diff JSON file")
+    parser.add_argument(
+        "diff_json",
+        type=Path,
+        help=(
+            "Path to diff JSON file. If a relative name is given and not found, "
+            "the script will also look inside SNAPSHOT_DIR "
+            f"({SNAPSHOT_DIR})."
+        ),
+    )
 
     args = parser.parse_args()
     diff_path: Path = args.diff_json
+
+    # If the given path isn't a file, and it's relative, try SNAPSHOT_DIR / name
+    if not diff_path.is_file():
+        if not diff_path.is_absolute():
+            candidate = SNAPSHOT_DIR / diff_path.name
+            if candidate.is_file():
+                diff_path = candidate
 
     if not diff_path.is_file():
         raise SystemExit(f"Diff file not found: {diff_path}")

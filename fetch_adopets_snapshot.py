@@ -4,8 +4,13 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
-
+import os
 import requests
+from dotenv import load_dotenv 
+
+load_dotenv()
+SNAPSHOT_DIR = Path(os.environ.get("SNAPSHOT_DIR", "snapshots"))
+SNAPSHOT_DIR.mkdir(exist_ok=True)
 
 # === CONFIG ===
 FIND_URL = "https://service.api.prd.adopets.app/adopter/pet/find?lang=en"
@@ -44,8 +49,6 @@ DETAIL_PAYLOAD_TEMPLATE = {
     "tracker_uuid": "20726cce-8281-4909-9c4e-0272c989bc19",
 }
 
-SNAPSHOT_DIR = Path("snapshots")
-SNAPSHOT_DIR.mkdir(exist_ok=True)
 
 HEADERS = {
     "Accept": "application/json",

@@ -2,12 +2,17 @@
 
 import json
 from pathlib import Path
+import os
 import argparse
 from textwrap import shorten  # still imported, fine if unused
 from datetime import datetime
 import re
 import difflib
+from dotenv import load_dotenv 
 
+load_dotenv()
+SNAPSHOT_DIR = Path(os.environ.get("SNAPSHOT_DIR", "snapshots"))
+SNAPSHOT_DIR.mkdir(exist_ok=True)
 
 def extract_date_from_filename(path: str) -> str:
     """
@@ -366,7 +371,15 @@ def main():
     parser = argparse.ArgumentParser(
         description="Render a human-readable report from an Adopets diff JSON."
     )
-    parser.add_argument("diff_json", type=Path, help="Path to diff JSON file")
+    parser.add_argument(
+        "diff_json",
+        type=Path,
+        help=(
+            "Path to diff JSON file. If a relative name is given and not found, "
+            "the script will also look inside SNAPSHOT_DIR "
+            f"({SNAPSHOT_DIR})."
+        ),
+    )
     parser.add_argument(
         "-o",
         "--output",
@@ -376,6 +389,13 @@ def main():
 
     args = parser.parse_args()
     diff_path: Path = args.diff_json
+
+    # If the given path isn't a file, and it's relative, try SNAPSHOT_DIR / name
+    if not diff_path.is_file():
+        if not diff_path.is_absolute():
+            candidate = SNAPSHOT_DIR / diff_path.name
+            if candidate.is_file():
+                diff_path = candidate
 
     if not diff_path.is_file():
         raise SystemExit(f"Diff file not found: {diff_path}")
