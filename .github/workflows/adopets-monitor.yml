@@ -62,6 +62,10 @@ jobs:
           )
           print(f"Created diff for {old_path} -> {new_path} at {out_path}")
           PY
+          
+      - name: Cross-check removed profiles vs outcomes
+        run: |
+          python crosscheck_removals.py snapshots/latest_diff.json
 
       - name: Send email summary
         run: |
