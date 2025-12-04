@@ -57,11 +57,21 @@ def one_line(rec: dict) -> str:
     animal_id = rec.get("animal_id", "?")
     name = rec.get("name", "?")
 
-    species = rec.get("species") or "Dog"
+    species = rec.get("species") or "?"
+    species = species.strip().title()
+    
     sex = rec.get("sex") or rec.get("sex_key") or "?"
+    sex_map = {
+        "MALE": "M",
+        "FEMALE": "F",
+    }
+    sex = sex_map.get(sex or "?")
+
     age = rec.get("age_key") or "?"
+    age = age.strip().title()
+
     size = rec.get("size_key") or "?"
-    breed = rec.get("breed_primary_name") or "Unknown breed"
+    breed = rec.get("breed_primary_name") or ""
 
     status = rec.get("status") or rec.get("status_new") or rec.get("status_old") or "?"
     location = (
@@ -71,7 +81,7 @@ def one_line(rec: dict) -> str:
         or "?"
     )
 
-    return f"[{animal_id}] {name} ({species}, {sex}, {age}, {size}) [{breed}, {status}, {location}]"
+    return f"[{animal_id}] {name} ({species}, {sex}, {age}, {size})"
 
 def compute_bio_delta(old_desc: str | None, new_desc: str | None) -> float:
     """
@@ -278,7 +288,7 @@ def build_email_body(diff: dict) -> str:
     lines.append("")
 
     # --- Location changes ---
-    lines.append("LOCATION CHANGES:")
+    lines.append("Location changes:")
     if location_changes:
 
         def add_loc_bucket(title: str, records: list[dict]):
@@ -287,8 +297,8 @@ def build_email_body(diff: dict) -> str:
                 for r in sorted(records, key=species_sort_key):
                     old_loc = r.get("location_old") or "Unknown"
                     new_loc = r.get("location_new") or "Unknown"
-                    lines.append(f"  - {one_line(r)}")
-                    lines.append(f"    Location: {old_loc} \u2192 {new_loc}")
+                    # Single-line format with location appended
+                    lines.append(f"  - {one_line(r)} -- Location: {old_loc} → {new_loc}")
             else:
                 lines.append("  - None")
             lines.append("")
@@ -297,6 +307,7 @@ def build_email_body(diff: dict) -> str:
         add_loc_bucket("Returned from foster", returned_from_foster)
         add_loc_bucket("Kennel changes", kennel_moves)
         add_loc_bucket("Other / uncategorized location changes", other_loc)
+
     else:
         lines.append("  None.")
         lines.append("")

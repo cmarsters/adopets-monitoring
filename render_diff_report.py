@@ -56,9 +56,19 @@ def format_animal_line(rec: dict) -> str:
     animal_id = rec.get("animal_id", "?")
     name = rec.get("name", "?")
 
-    species = rec.get("species") or "Dog"
+    species = rec.get("species") or "?"
+    species = species.strip().title()
+
     sex = rec.get("sex") or rec.get("sex_key") or "?"
+    sex_map = {
+        "MALE": "M",
+        "FEMALE": "F",
+    }
+    sex = sex_map.get(sex or "?")
+    
     age = rec.get("age_key") or "?"
+    age = age.strip().title()
+    
     size = rec.get("size_key") or "?"
     breed = rec.get("breed_primary_name") or "Unknown breed"
 
@@ -71,11 +81,7 @@ def format_animal_line(rec: dict) -> str:
         or rec.get("location_old")
         or "?"
     )
-
-    return (
-        f"- [{animal_id}] {name} "
-        f"({species}, {sex}, {age}, {size}) "
-    )
+    return f"[{animal_id}] {name} ({species}, {sex}, {age}, {size})"
 
 
 def summarize_bio_change(old_desc: str | None, new_desc: str | None, context: int = 120):
