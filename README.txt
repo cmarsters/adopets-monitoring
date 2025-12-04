@@ -1,6 +1,6 @@
 README.txt
 
-1) email_adopets_changes.py 
+1) fetch_adopets_snapshot.py 
 	output: snapshot .json
 
 2) compare_snapshots.py
