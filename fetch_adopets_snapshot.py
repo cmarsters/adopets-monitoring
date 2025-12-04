@@ -139,15 +139,36 @@ def normalize_record(list_item: dict, detail_data: dict) -> dict:
         if name:
             char_names.append(name)
 
+    # Compute a friendly location label
+    foster = org_pet_list.get("foster")
+    kennel = org_pet_list.get("kennel_number")
+
+    if foster:
+        location_label = "Foster"
+    elif kennel:
+        location_label = f"Kennel {kennel}"
+    else:
+        location_label = "Unknown"
+
     return {
         "uuid": org_pet_list.get("uuid"),
         "animal_id": org_pet_list.get("code"),
         "name": org_pet_list.get("name"),
-        "status": org_pet_list.get("status_key"),
-        "foster": org_pet_list.get("foster"),
+
+        # basic info
+        "species": org_pet_list.get("specie_name"),
         "sex": org_pet_list.get("sex_key"),
         "age_key": org_pet_list.get("age_key"),
         "size_key": org_pet_list.get("size_key"),
+        "breed_primary_name": org_pet_list.get("breed_primary_name"),
+
+        # location and availability
+        "status": org_pet_list.get("status_key"), 
+        "foster": foster,
+        "kennel_number": kennel,
+        "location": location_label,
+
+        # media + description 
         "picture": org_pet_list.get("picture"),
         "description_html": (
             org_pet_detail.get("description")
