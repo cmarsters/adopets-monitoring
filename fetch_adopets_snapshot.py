@@ -11,6 +11,9 @@ from dotenv import load_dotenv
 load_dotenv()
 SNAPSHOT_DIR = Path(os.environ.get("SNAPSHOT_DIR", "snapshots"))
 SNAPSHOT_DIR.mkdir(exist_ok=True)
+ADOPETS_API_TOKEN = os.environ.get("ADOPETS_API_TOKEN")
+if not ADOPETS_API_TOKEN:
+    raise RuntimeError("Missing ADOPETS_API_TOKEN environment variable")
 
 # === CONFIG ===
 FIND_URL = "https://service.api.prd.adopets.app/adopter/pet/find?lang=en"
@@ -49,10 +52,9 @@ DETAIL_PAYLOAD_TEMPLATE = {
     "tracker_uuid": "20726cce-8281-4909-9c4e-0272c989bc19",
 }
 
-
 HEADERS = {
     "Accept": "application/json",
-    "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhZG8tYXBpLXNlcnZpY2UiLCJhdWQiOiJwcmQiLCJqdGkiOiIyNzgwYjBmMi0yOWVmLTQyMTktODQwMS0yZDI3NTcwYjMzMzEiLCJpYXQiOjE3NjQ2MzM5OTguMTIyNjEzLCJsb2dnZWQiOmZhbHNlLCJtb2R1bGUiOiJBRE9QVEVSIn0.eRnNRNH14N3akU-0QShGGOBi7heZ3YKpMV285po6T4Q",
+    "Authorization": f"Bearer {ADOPETS_API_TOKEN}",
 }
 
 
