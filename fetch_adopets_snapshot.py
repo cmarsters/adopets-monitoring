@@ -148,7 +148,7 @@ def normalize_record(list_item: dict, detail_data: dict) -> dict:
     elif kennel:
         location_label = f"Kennel {kennel}"
     else:
-        location_label = "Unknown"
+        location_label = "Shelter - unspecified"
 
     return {
         "uuid": org_pet_list.get("uuid"),
