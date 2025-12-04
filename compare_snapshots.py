@@ -51,10 +51,13 @@ def compare_snapshots(old_path: Path, new_path: Path) -> dict:
                 "uuid": rec.get("uuid"),
                 "animal_id": rec.get("animal_id"),
                 "name": rec.get("name"),
-                "status": rec.get("status"),
+                "species": rec.get("species"),
                 "sex": rec.get("sex"),
                 "age_key": rec.get("age_key"),
                 "size_key": rec.get("size_key"),
+                "breed_primary_name": rec.get("breed_primary_name"),
+                "status": rec.get("status"),
+                "location": rec.get("location")
             }
         )
 
@@ -66,26 +69,29 @@ def compare_snapshots(old_path: Path, new_path: Path) -> dict:
                 "uuid": rec.get("uuid"),
                 "animal_id": rec.get("animal_id"),
                 "name": rec.get("name"),
-                "status": rec.get("status"),
+                "species": rec.get("species"),
                 "sex": rec.get("sex"),
                 "age_key": rec.get("age_key"),
                 "size_key": rec.get("size_key"),
+                "breed_primary_name": rec.get("breed_primary_name"),
+                "status": rec.get("status"),
+                "location": rec.get("location")
             }
         )
 
-    # Changed animals: compare traits + bios
+    # Changed animals: compare traits + bios + location
     for pid in common_ids:
         old = old_data[pid]
         new = new_data[pid]
 
-        # Compare characteristics as sets of keys
+        # 1) Characteristics as sets of keys
         old_keys = set(old.get("characteristic_keys") or [])
         new_keys = set(new.get("characteristic_keys") or [])
 
         char_added = sorted(new_keys - old_keys)
         char_removed = sorted(old_keys - new_keys)
 
-        # Compare descriptions (normalized)
+        # 2) Descriptions (normalized)
         old_desc = old.get("description_html")
         new_desc = new.get("description_html")
 
@@ -94,22 +100,64 @@ def compare_snapshots(old_path: Path, new_path: Path) -> dict:
 
         description_changed = old_norm != new_norm
 
-        if char_added or char_removed or description_changed:
+        # 3) Location / foster changes
+        old_loc = old.get("location")
+        new_loc = new.get("location")
+        old_foster = bool(old.get("foster"))
+        new_foster = bool(new.get("foster"))
+
+        location_changed = (old_loc != new_loc) or (old_foster != new_foster)
+
+        location_change_type = None
+        if location_changed:
+            if (not old_foster) and new_foster:
+                location_change_type = "went_to_foster"
+            elif old_foster and (not new_foster):
+                location_change_type = "returned_from_foster"
+            elif old_loc != new_loc:
+                location_change_type = "kennel_move"
+            else:
+                location_change_type = "other"
+
+
+        # 4) If *anything* changed, record it
+        if char_added or char_removed or description_changed or location_changed:
             animals_changed.append(
                 {
-                    "uuid": pid,
+                    "uuid": pid,  # keep this as-is for backward compatibility
                     "animal_id": new.get("animal_id", old.get("animal_id")),
                     "name": new.get("name", old.get("name")),
+
+                    # basic info for nicer reports / emails
+                    "species": new.get("species", old.get("species")),
+                    "sex": new.get("sex", old.get("sex")),
+                    "age_key": new.get("age_key", old.get("age_key")),
+                    "size_key": new.get("size_key", old.get("size_key")),
+                    "breed_primary_name": new.get("breed_primary_name", old.get("breed_primary_name")),
+
+                    # status
                     "status_old": old.get("status"),
                     "status_new": new.get("status"),
+                    
+                    # location / foster changes
+                    "location_old": old_loc,
+                    "location_new": new_loc,
+                    "foster_old": old_foster,
+                    "foster_new": new_foster,
+                    "location_changed": location_changed,
+                    "location_change_type": location_change_type,
+
+                    # traits
                     "characteristics_added": char_added,
                     "characteristics_removed": char_removed,
+
+                    # bios
                     "description_changed": description_changed,
-                    # include full bios so you can diff them later if you want
                     "description_old": old_desc,
                     "description_new": new_desc,
                 }
             )
+
 
     diff = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
