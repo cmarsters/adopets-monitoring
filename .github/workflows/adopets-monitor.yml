@@ -2,7 +2,7 @@ name: Adopets daily monitoring
 
 on:
   schedule:
-    # Every day at 13:00 UTC (adjust if you want)
+    # Every day at 10:00 UTC (adjust if you want)
     - cron: "0 10 * * *"
   workflow_dispatch: {}
 
@@ -35,10 +35,29 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # 1) Take today's snapshot
       - name: Run snapshot script (today's snapshot)
         run: |
           python fetch_adopets_snapshot.py
 
+      # 2) Commit new snapshot immediately, so it's preserved even if later steps fail
+      - name: Commit new snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Stage new snapshots (latest_diff.json should be ignored by .gitignore)
+          git add snapshots/*.json || true
+
+          # Only commit if there are changes
+          if git diff --cached --quiet; then
+            echo "No snapshot changes to commit."
+          else
+            git commit -m "Add snapshot for $(date -u +'%Y-%m-%d')"
+            git push
+          fi
+
+      # 3) Build diff vs previous snapshot (uses local working copy, commit timing doesn't matter)
       - name: Build diff vs previous snapshot
         run: |
           python - << 'PY'
@@ -64,31 +83,20 @@ jobs:
           print(f"Created diff for {old_path} -> {new_path} at {out_path}")
           PY
           
+      # 4) Cross-check removals vs outcomes
       - name: Cross-check removed profiles vs outcomes
         run: |
-          python crosscheck_removals.py snapshots/latest_diff.json
+          if [ -f "snapshots/latest_diff.json" ]; then
+            python crosscheck_removals.py snapshots/latest_diff.json
+          else
+            echo "No diff file found; skipping cross-check."
+          fi
 
+      # 5) Send email summary
       - name: Send email summary
         run: |
           if [ -f "snapshots/latest_diff.json" ]; then
             python email_adopets_changes.py snapshots/latest_diff.json
           else
             echo "No diff file found; skipping email."
-          fi
-
-      - name: Commit new snapshot
-        run: |
-          # Configure git identity for this action
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Stage new snapshots (but latest_diff.json is ignored by .gitignore)
-          git add snapshots/*.json
-
-          # Only commit if there are changes (i.e., new snapshot created)
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "Add snapshot for $(date -u +'%Y-%m-%d')"
-            git push
           fi
