@@ -321,7 +321,7 @@ def build_email_body(diff: dict) -> str:
     if bios_changed:
         for rec in sorted(bios_changed, key=species_sort_key):
             pct = rec.get("bio_delta_pct")
-            pct_str = f" (~{pct}% difference)" if pct is not None else ""
+            pct_str = f" ~{pct}%" if pct is not None else ""
             lines.append(f"  - {one_line(rec)}{pct_str}")
         lines.append("")
     else:
@@ -537,10 +537,11 @@ def build_html_body(diff: dict) -> str:
         lines.append("<ul>")
         for rec in sorted(bios_changed, key=species_sort_key):
             pct = rec.get("bio_delta_pct")
-            pct_str = f" (~{pct}% difference)" if pct is not None else ""
+            pct_str = f"~{pct}%" if pct is not None else ""
+
             lines.append(
                 f"<li>{html_line(rec)}"
-                f"<div class='bio-changed'>Bio changed by: {escape(pct_str.strip())}</div>"
+                f"<div class='bio-changed'>Bio changed by {escape(pct_str)}</div>"
                 f"</li>"
             )
         lines.append("</ul>")
