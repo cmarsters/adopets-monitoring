@@ -55,6 +55,54 @@ def format_animal_line(rec: dict) -> str:
         f"[{breed}, {status}, {location}]"
     )
 
+def summarize_bio_change(old_desc: str | None, new_desc: str | None, context: int = 120):
+    """
+    Return (delta_pct, old_snip, new_snip) where:
+      - delta_pct is an approximate % difference between old and new bios
+      - old_snip/new_snip are short snippets around the first changed region
+
+    This keeps the report compact but still shows the meaningful change,
+    even if it's not at the beginning of the bio.
+    """
+    old_text = " ".join((old_desc or "").split())
+    new_text = " ".join((new_desc or "").split())
+
+    if not old_text and not new_text:
+        return 0.0, "", ""
+
+    sm = difflib.SequenceMatcher(None, old_text, new_text)
+    # quick_ratio is fast; ratio is more exact if needed
+    ratio = sm.quick_ratio() or sm.ratio()
+    delta_pct = round((1 - ratio) * 100, 1)
+
+    old_snip = ""
+    new_snip = ""
+
+    # Find the first non-equal block and grab some context around it
+    for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        if tag == "equal":
+            continue
+
+        start_old = max(i1 - context // 2, 0)
+        end_old = min(i2 + context // 2, len(old_text))
+        start_new = max(j1 - context // 2, 0)
+        end_new = min(j2 + context // 2, len(new_text))
+
+        old_snip = old_text[start_old:end_old]
+        new_snip = new_text[start_new:end_new]
+
+        if start_old > 0:
+            old_snip = "..." + old_snip
+        if end_old < len(old_text):
+            old_snip += "..."
+        if start_new > 0:
+            new_snip = "..." + new_snip
+        if end_new < len(new_text):
+            new_snip += "..."
+        break  # just first changed region
+
+    return delta_pct, old_snip, new_snip
+
 def make_markdown_report(diff: dict) -> str:
     summary = diff.get("summary", {})
     animals_added = diff.get("animals_added", [])
@@ -177,10 +225,10 @@ def make_markdown_report(diff: dict) -> str:
                 lines.append("- None")
                 lines.append("")
 
-        add_location_section("Went to foster", went_to_foster)
-        add_location_section("Returned from foster", returned_from_foster)
-        add_location_section("Kennel moves", kennel_moves)
-        add_location_section("Other / uncategorized location changes", other_loc)
+        add_location_section("Went to Foster", went_to_foster)
+        add_location_section("Returned from Foster", returned_from_foster)
+        add_location_section("Kennel Changes", kennel_moves)
+        add_location_section("Other / Uncategorized Location Changes", other_loc)
 
     else:
         lines.append("- None")
@@ -192,26 +240,39 @@ def make_markdown_report(diff: dict) -> str:
         for rec in bio_changes:
             animal_id = rec.get("animal_id", "?")
             name = rec.get("name", "?")
-            species = rec.get("species", "")
-            lines.append(f"### [{animal_id}] {name}, ({species})")
+            lines.append(f"### [{animal_id}] {name}")
 
             old_desc = rec.get("description_old") or ""
             new_desc = rec.get("description_new") or ""
 
-            # Shorten to something readable; adjust width as you like
-            old_snip = shorten(" ".join(old_desc.split()), width=300, placeholder="...")
-            new_snip = shorten(" ".join(new_desc.split()), width=300, placeholder="...")
+            delta_pct, old_snip, new_snip = summarize_bio_change(old_desc, new_desc)
 
-            lines.append("- **Bio changed:** yes")
+            # Handle special 100% cases cleanly
+            if delta_pct >= 99.0:  # basically completely different
+                if not old_desc.strip() and new_desc.strip():
+                    # New bio added where previously empty
+                    lines.append("- **Bio added.**")
+                elif old_desc.strip() and not new_desc.strip():
+                    # Bio was removed entirely
+                    lines.append("- **Bio removed.**")
+                else:
+                    # Both non-empty but totally rewritten
+                    lines.append("- **Bio rewritten.**")
+                lines.append("")
+                continue  # skip detailed snippets
+
+            # Normal (partial) bio changes
+            lines.append(f"- **Bio changed:** ~{delta_pct}% difference")
+
             if old_snip:
-                lines.append("  - Old (first 300 chars):")
+                lines.append("  - Old (changed portion):")
                 lines.append(f"    > {old_snip}")
             if new_snip:
-                lines.append("  - New (first 300 chars):")
+                lines.append("  - New (changed portion):")
                 lines.append(f"    > {new_snip}")
             lines.append("")
     else:
-        lines.append("- None")
+        lines.append("None")
         lines.append("")
 
     return "\n".join(lines)
