@@ -74,8 +74,9 @@ def one_line(rec: dict) -> str:
     # Age & size
     age = (rec.get("age_key") or "?").strip().title()
     size = (rec.get("size_key") or "?").strip()
-
-    return f"[{animal_id}] {name} ({species}, {sex}, {age}, {size})"
+    
+    bold_label = f"**[{animal_id}] {name}**"
+    return f"{bold_label} ({species}, {sex}, {age}, {size})"
 
 def compute_bio_delta(old_desc: str | None, new_desc: str | None) -> float:
     """
@@ -378,8 +379,21 @@ def build_html_body(diff: dict) -> str:
 
     def html_line(rec: dict) -> str:
         """HTML-safe version of one_line with slight emphasis."""
-        text = one_line(rec)
-        return escape(text)
+        animal_id = rec.get("animal_id", "?")
+        name = rec.get("name", "?")
+        species = (rec.get("species") or "?").strip().title()
+        sex_raw = (rec.get("sex") or rec.get("sex_key") or "?").strip()
+        sex_norm = sex_raw.lower()
+        sex_map = {"male": "M", "female": "F"}
+        sex = sex_map.get(sex_norm, sex_raw.title() if sex_raw else "?")
+        age = (rec.get("age_key") or "?").strip().title()
+        size = (rec.get("size_key") or "?").strip()
+
+        return (
+            f"<strong>[{escape(str(animal_id))}] {escape(name)}</strong> "
+            f"({escape(species)}, {escape(sex)}, {escape(age)}, {escape(size)})"
+        )
+
 
     def html_section_title(text: str) -> str:
         return f"<h2>{escape(text)}</h2>"
@@ -494,21 +508,21 @@ def build_html_body(diff: dict) -> str:
     # Bio changes
     lines.append(html_section_title("Bio Changes"))
 
-    # Bios removed
-    lines.append("<h3>Bios REMOVED</h3>")
-    if bios_removed:
-        lines.append("<ul>")
-        for rec in sorted(bios_removed, key=species_sort_key):
-            lines.append(f"<li>{html_line(rec)}</li>")
-        lines.append("</ul>")
-    else:
-        lines.append("<ul><li>None</li></ul>")
-
     # Bios added
     lines.append("<h3>Bios ADDED</h3>")
     if bios_added:
         lines.append("<ul>")
         for rec in sorted(bios_added, key=species_sort_key):
+            lines.append(f"<li>{html_line(rec)}</li>")
+        lines.append("</ul>")
+    else:
+        lines.append("<ul><li>None</li></ul>")
+
+    # Bios removed
+    lines.append("<h3>Bios REMOVED</h3>")
+    if bios_removed:
+        lines.append("<ul>")
+        for rec in sorted(bios_removed, key=species_sort_key):
             lines.append(f"<li>{html_line(rec)}</li>")
         lines.append("</ul>")
     else:
@@ -533,7 +547,7 @@ def build_html_body(diff: dict) -> str:
     lines.append("<div class='section-divider'></div>")
 
     # Location changes
-    lines.append(html_section_title("Location changes"))
+    lines.append(html_section_title("Location Changes"))
 
     def add_loc_bucket(title: str, records: list[dict]):
         lines.append(f"<h3>{escape(title)}</h3>")
@@ -593,6 +607,7 @@ def send_email(
         server.login(username, password)
         server.send_message(msg)
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Email a human-readable summary of Adopets changes."
@@ -647,7 +662,6 @@ def main():
     print("Email sent.")
     print(f"Subject: {subject}")
     print(f"To: {', '.join(to_addrs)}")
-
 
 if __name__ == "__main__":
     main()
