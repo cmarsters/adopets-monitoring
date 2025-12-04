@@ -8,29 +8,16 @@ from dotenv import load_dotenv
 import smtplib
 from email.message import EmailMessage
 from datetime import datetime
-from textwrap import shorten
+import re
+import difflib
 
 load_dotenv()  # loads .env when running locally; harmless in Actions
-
-SMTP_HOST = os.environ["SMTP_HOST"]
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-AAC_EMAIL_FROM = os.environ["EMAIL_USER"]
-AAC_EMAIL_USER = os.environ["EMAIL_USER"]
-AAC_EMAIL_PASS = os.environ["EMAIL_PASS"]
-AAC_EMAIL_TO   = os.environ["EMAIL_TO"]
-
-def load_diff(path: Path) -> dict:
-    with path.open("r", encoding="utf-8") as f:
-        return json.load(f)
-
 
 def extract_date_from_filename(path: str) -> str:
     """
     Extract YYYY-MM-DD from a filename and format it as 'Dec 2, 2025'.
     If no date found, return the original path.
     """
-    import re
-
     match = re.search(r"\d{4}-\d{2}-\d{2}", path)
     if not match:
         return path
@@ -42,17 +29,63 @@ def extract_date_from_filename(path: str) -> str:
     except ValueError:
         return date_str
 
+def load_diff(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as f:
+        return json.load(f)
+
+def species_sort_key(rec: dict):
+    """
+    Sort key that orders by species, then name, then animal_id:
+      - Dogs first
+      - Cats second
+      - Everything else last
+    """
+    species_raw = (rec.get("species") or "").strip()
+    species = species_raw.lower()
+    if species == "dog":
+        grp = 0
+    elif species == "cat":
+        grp = 1
+    else:
+        grp = 2
+    name = rec.get("name") or ""
+    animal_id = rec.get("animal_id") or ""
+    return (grp, name.lower(), str(animal_id))
 
 def one_line(rec: dict) -> str:
-    """One-line animal summary."""
+    """One-line animal summary (matches the markdown style)."""
     animal_id = rec.get("animal_id", "?")
     name = rec.get("name", "?")
+
+    species = rec.get("species") or "Dog"
     sex = rec.get("sex") or rec.get("sex_key") or "?"
     age = rec.get("age_key") or "?"
     size = rec.get("size_key") or "?"
-    status = rec.get("status") or rec.get("status_new") or rec.get("status_old") or "?"
-    return f"[{animal_id}] {name} ({sex}, {age}, {size}, {status})"
+    breed = rec.get("breed_primary_name") or "Unknown breed"
 
+    status = rec.get("status") or rec.get("status_new") or rec.get("status_old") or "?"
+    location = (
+        rec.get("location")
+        or rec.get("location_new")
+        or rec.get("location_old")
+        or "?"
+    )
+
+    return f"[{animal_id}] {name} ({species}, {sex}, {age}, {size}) [{breed}, {status}, {location}]"
+
+def compute_bio_delta(old_desc: str | None, new_desc: str | None) -> float:
+    """
+    Approximate % difference between old and new bios (0–100).
+    """
+    old_text = " ".join((old_desc or "").split())
+    new_text = " ".join((new_desc or "").split())
+
+    if not old_text and not new_text:
+        return 0.0
+
+    sm = difflib.SequenceMatcher(None, old_text, new_text)
+    ratio = sm.quick_ratio() or sm.ratio()
+    return round((1 - ratio) * 100, 1)
 
 def build_email_body(diff: dict) -> str:
     summary = diff.get("summary", {})
@@ -63,104 +96,214 @@ def build_email_body(diff: dict) -> str:
     old_label = extract_date_from_filename(diff.get("old_snapshot", ""))
     new_label = extract_date_from_filename(diff.get("new_snapshot", ""))
 
-    # Split changed into buckets
-    trait_loss = []      # animals that LOST at least one trait
-    trait_gain_only = [] # animals that only gained traits
-    bio_changes = []     # animals with bio changes
+    # --- Classify changed animals ---
+    trait_changes: list[dict] = []
+    bio_changes_raw: list[dict] = []
+    location_changes: list[dict] = []
 
     for rec in animals_changed:
-        added = set(rec.get("characteristics_added") or [])
-        removed = set(rec.get("characteristics_removed") or [])
+        added = rec.get("characteristics_added") or []
+        removed = rec.get("characteristics_removed") or []
         desc_changed = bool(rec.get("description_changed"))
+        has_trait_change = bool(added or removed)
+        has_location_change = bool(rec.get("location_changed") or rec.get("location_change_type"))
 
-        if removed:
-            trait_loss.append(rec)
-        elif added:
-            trait_gain_only.append(rec)
+        if has_trait_change:
+            trait_changes.append(rec)
         if desc_changed:
-            bio_changes.append(rec)
+            bio_changes_raw.append(rec)
+        if has_location_change:
+            location_changes.append(rec)
 
-    lines = []
+    # --- Split trait changes into added vs removed ---
+    traits_added: list[dict] = []
+    traits_removed: list[dict] = []
 
-    lines.append(f"Adopets profile changes for AAC")
+    for rec in trait_changes:
+        added = rec.get("characteristics_added") or []
+        removed = rec.get("characteristics_removed") or []
+        if added:
+            traits_added.append(rec)
+        if removed:
+            traits_removed.append(rec)
+
+    # --- Bio buckets: removed / added / changed ---
+    bios_added: list[dict] = []
+    bios_removed: list[dict] = []
+    bios_changed: list[dict] = []
+
+    for rec in bio_changes_raw:
+        old_desc = rec.get("description_old") or ""
+        new_desc = rec.get("description_new") or ""
+
+        old_has = bool(old_desc.strip())
+        new_has = bool(new_desc.strip())
+
+        if not old_has and new_has:
+            bios_added.append(rec)
+        elif old_has and not new_has:
+            bios_removed.append(rec)
+        elif old_has and new_has:
+            delta = compute_bio_delta(old_desc, new_desc)
+            rec_copy = dict(rec)
+            rec_copy["bio_delta_pct"] = delta
+            bios_changed.append(rec_copy)
+
+    # --- Location buckets ---
+    went_to_foster: list[dict] = []
+    returned_from_foster: list[dict] = []
+    kennel_moves: list[dict] = []
+    other_loc: list[dict] = []
+
+    for rec in location_changes:
+        change_type = rec.get("location_change_type")
+        if change_type == "went_to_foster":
+            went_to_foster.append(rec)
+        elif change_type == "returned_from_foster":
+            returned_from_foster.append(rec)
+        elif change_type == "kennel_move":
+            kennel_moves.append(rec)
+        else:
+            other_loc.append(rec)
+
+    lines: list[str] = []
+
+    # --- Header & summary ---
+    lines.append("Adopets profile changes for AAC")
     lines.append(f"From {old_label} to {new_label}")
     lines.append("")
     lines.append("Summary:")
     lines.append(f"- Old total: {summary.get('total_old', 0)}")
     lines.append(f"- New total: {summary.get('total_new', 0)}")
-    lines.append(f"- Animals added: {summary.get('animals_added', 0)}")
-    lines.append(f"- Animals removed: {summary.get('animals_removed', 0)}")
-    lines.append(f"- Animals with any changes: {summary.get('animals_changed', 0)}")
+    lines.append(f"- Profiles added: {summary.get('animals_added', 0)}")
+    lines.append(f"- Profiles removed: {summary.get('animals_removed', 0)}")
+    lines.append(f"- Profiles changed: {summary.get('animals_changed', 0)}")
     lines.append("")
     lines.append("=" * 60)
     lines.append("")
 
-    # 1) Trait losses (main thing you care about)
-    lines.append("ANIMALS THAT LOST TRAITS (most important):")
-    if trait_loss:
-        for rec in trait_loss:
-            lines.append(f"- {one_line(rec)}")
-            removed = ", ".join(sorted(rec.get("characteristics_removed") or []))
-            added = ", ".join(sorted(rec.get("characteristics_added") or []))
-            lines.append(f"    Removed: {removed}")
-            if added:
-                lines.append(f"    Added:   {added}")
-        lines.append("")
-    else:
-        lines.append("  None 🥳")
-        lines.append("")
-
-    lines.append("=" * 60)
-    lines.append("")
-
-    # 2) New animals
-    lines.append("NEW ANIMALS ADDED:")
+    # --- Animals ADDED ---
+    lines.append("Profiles ADDED to Adopets:")
     if animals_added:
-        for rec in animals_added:
+        for rec in sorted(animals_added, key=species_sort_key):
             lines.append(f"- {one_line(rec)}")
         lines.append("")
     else:
         lines.append("  None.")
         lines.append("")
 
-    # 3) Animals removed (adopted, transferred, etc.)
-    lines.append("ANIMALS REMOVED FROM THIS SNAPSHOT:")
+    # --- Animals REMOVED ---
+    lines.append("Profiles REMOVED from Adopets:")
     if animals_removed:
-        for rec in animals_removed:
-            lines.append(f"- {one_line(rec)}")
+        for rec in sorted(animals_removed, key=species_sort_key):
+            line = f"- {one_line(rec)}"
+            outcome = rec.get("outcome_status")
+            if outcome:
+                line += f" (Outcome: {outcome})"
+            lines.append(line)
         lines.append("")
     else:
         lines.append("  None.")
         lines.append("")
+    lines.append("=" * 60)
+    lines.append("")
 
-    # 4) Animals with only trait gains (nice to know, but less urgent)
-    lines.append("ANIMALS THAT ONLY GAINED TRAITS:")
-    if trait_gain_only:
-        for rec in trait_gain_only:
-            lines.append(f"- {one_line(rec)}")
-            added = ", ".join(sorted(rec.get("characteristics_added") or []))
-            lines.append(f"    Added: {added}")
+    # --- Trait changes ---
+    lines.append("TRAIT CHANGES:")
+    if trait_changes:
+        # Traits ADDED
+        lines.append("  Traits ADDED:")
+        if traits_added:
+            for rec in sorted(traits_added, key=species_sort_key):
+                added = rec.get("characteristics_added") or []
+                added_str = ", ".join(sorted(added))
+                lines.append(f"  - {one_line(rec)}")
+                lines.append(f"    Added traits: {added_str}")
+        else:
+            lines.append("  - None")
+        lines.append("")
+
+        # Traits REMOVED
+        lines.append("  Traits REMOVED:")
+        if traits_removed:
+            for rec in sorted(traits_removed, key=species_sort_key):
+                removed = rec.get("characteristics_removed") or []
+                removed_str = ", ".join(sorted(removed))
+                lines.append(f"  - {one_line(rec)}")
+                lines.append(f"    Removed traits: {removed_str}")
+        else:
+            lines.append("  - None")
         lines.append("")
     else:
         lines.append("  None.")
         lines.append("")
+    lines.append("=" * 60)
+    lines.append("")
 
-    # 5) Bio changes (just show a snippet of the new bio)
-    lines.append("ANIMALS WITH BIO CHANGES:")
-    if bio_changes:
-        for rec in bio_changes:
-            lines.append(f"- {one_line(rec)}")
-            new_desc = rec.get("description_new") or ""
-            if new_desc:
-                snip = shorten(" ".join(new_desc.split()), width=200, placeholder="...")
-                lines.append(f"    New bio (first 200 chars): {snip}")
+    # --- Bio changes ---
+    lines.append("BIO CHANGES:")
+
+    # Bios REMOVED
+    lines.append("  Bios REMOVED:")
+    if bios_removed:
+        for rec in sorted(bios_removed, key=species_sort_key):
+            lines.append(f"  - {one_line(rec)}")
         lines.append("")
+    else:
+        lines.append("  - None")
+        lines.append("")
+
+    # Bios ADDED
+    lines.append("  Bios ADDED:")
+    if bios_added:
+        for rec in sorted(bios_added, key=species_sort_key):
+            lines.append(f"  - {one_line(rec)}")
+        lines.append("")
+    else:
+        lines.append("  - None")
+        lines.append("")
+
+    # Bios CHANGED
+    lines.append("  Bios CHANGED:")
+    if bios_changed:
+        for rec in sorted(bios_changed, key=species_sort_key):
+            pct = rec.get("bio_delta_pct")
+            pct_str = f" (~{pct}% difference)" if pct is not None else ""
+            lines.append(f"  - {one_line(rec)}{pct_str}")
+        lines.append("")
+    else:
+        lines.append("  - None")
+        lines.append("")
+    lines.append("=" * 60)
+    lines.append("")
+
+    # --- Location changes ---
+    lines.append("LOCATION CHANGES:")
+    if location_changes:
+
+        def add_loc_bucket(title: str, records: list[dict]):
+            lines.append(f"  {title}:")
+            if records:
+                for r in sorted(records, key=species_sort_key):
+                    old_loc = r.get("location_old") or "Unknown"
+                    new_loc = r.get("location_new") or "Unknown"
+                    lines.append(f"  - {one_line(r)}")
+                    lines.append(f"    Location: {old_loc} \u2192 {new_loc}")
+            else:
+                lines.append("  - None")
+            lines.append("")
+
+        add_loc_bucket("Went to foster", went_to_foster)
+        add_loc_bucket("Returned from foster", returned_from_foster)
+        add_loc_bucket("Kennel changes", kennel_moves)
+        add_loc_bucket("Other / uncategorized location changes", other_loc)
     else:
         lines.append("  None.")
         lines.append("")
-
+    lines.append("=" * 60)
+    lines.append("")
+    lines.append(" END ")
     return "\n".join(lines)
-
 
 def send_email(
     subject: str,
@@ -200,27 +343,27 @@ def main():
     body = build_email_body(diff)
 
     # Email configuration (loaded from env)
-    from_addr = AAC_EMAIL_FROM
-    to_env = AAC_EMAIL_TO
-    username = AAC_EMAIL_USER
-    password = AAC_EMAIL_PASS
+    from_addr = os.environ.get("AAC_EMAIL_FROM") or os.environ.get("EMAIL_USER")
+    to_env = os.environ.get("AAC_EMAIL_TO") or os.environ.get("EMAIL_TO")
+    username = os.environ.get("AAC_EMAIL_USER") or from_addr
+    password = os.environ.get("AAC_EMAIL_PASS") or os.environ.get("EMAIL_PASS")
     subject_prefix = os.environ.get("AAC_EMAIL_SUBJECT_PREFIX", "[AAC Adopets]")
 
     if not from_addr or not to_env or not password:
         raise SystemExit(
-            "Missing email configuration. Please set AAC_EMAIL_FROM, "
-            "AAC_EMAIL_TO, and AAC_EMAIL_PASS in your environment."
+            "Missing email configuration. Please set either "
+            "(AAC_EMAIL_FROM, AAC_EMAIL_TO, AAC_EMAIL_PASS) or "
+            "(EMAIL_USER, EMAIL_TO, EMAIL_PASS) in your environment."
         )
 
     to_addrs = [addr.strip() for addr in to_env.split(",") if addr.strip()]
 
     old_label = extract_date_from_filename(diff.get("old_snapshot", ""))
     new_label = extract_date_from_filename(diff.get("new_snapshot", ""))
-    subject = f"{subject_prefix} Adopets changes from {old_label} to {new_label}"
+    subject = f"{subject_prefix} Changes from {old_label} to {new_label}"
 
-    # For Gmail; adjust if you use another provider
-    smtp_host = SMTP_HOST or "smtp.gmail.com"
-    smtp_port = SMTP_PORT or 587
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
 
     send_email(
         subject=subject,
