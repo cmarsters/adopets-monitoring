@@ -3,10 +3,11 @@
 import json
 from pathlib import Path
 import argparse
-from textwrap import shorten
+from textwrap import shorten  # still imported, fine if unused
 from datetime import datetime
 import re
 import difflib
+
 
 def extract_date_from_filename(path: str) -> str:
     """
@@ -24,9 +25,31 @@ def extract_date_from_filename(path: str) -> str:
     except ValueError:
         return date_str
 
+
 def load_diff(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def species_sort_key(rec: dict):
+    """
+    Sort key that orders by species, then name, then animal_id:
+      - Dogs first
+      - Cats second
+      - Everything else last
+    """
+    species_raw = (rec.get("species") or "").strip()
+    species = species_raw.lower()
+    if species == "dog":
+        grp = 0
+    elif species == "cat":
+        grp = 1
+    else:
+        grp = 2
+    name = rec.get("name") or ""
+    animal_id = rec.get("animal_id") or ""
+    return (grp, name.lower(), str(animal_id))
+
 
 def format_animal_line(rec: dict) -> str:
     """One-line summary for an animal."""
@@ -38,7 +61,7 @@ def format_animal_line(rec: dict) -> str:
     age = rec.get("age_key") or "?"
     size = rec.get("size_key") or "?"
     breed = rec.get("breed_primary_name") or "Unknown breed"
-    
+
     status = rec.get("status") or rec.get("status_new") or rec.get("status_old") or "?"
     # For added/removed records we have 'location';
     # for changed records we may only have location_old/location_new.
@@ -52,8 +75,8 @@ def format_animal_line(rec: dict) -> str:
     return (
         f"- [{animal_id}] {name} "
         f"({species}, {sex}, {age}, {size}) "
-        f"[{breed}, {status}, {location}]"
     )
+
 
 def summarize_bio_change(old_desc: str | None, new_desc: str | None, context: int = 120):
     """
@@ -103,6 +126,7 @@ def summarize_bio_change(old_desc: str | None, new_desc: str | None, context: in
 
     return delta_pct, old_snip, new_snip
 
+
 def make_markdown_report(diff: dict) -> str:
     summary = diff.get("summary", {})
     animals_added = diff.get("animals_added", [])
@@ -120,30 +144,34 @@ def make_markdown_report(diff: dict) -> str:
     lines.append("")
 
     # Summary
+    lines.append("-------------------------------------------------------------")
     lines.append("## Summary")
     lines.append(f"- Old total: {summary.get('total_old', 0)}")
     lines.append(f"- New total: {summary.get('total_new', 0)}")
     lines.append(f"- Profiles added: {summary.get('animals_added', 0)}")
     lines.append(f"- Profiles removed: {summary.get('animals_removed', 0)}")
     lines.append(f"- Profiles changed: {summary.get('animals_changed', 0)}")
+    lines.append("-------------------------------------------------------------")    
     lines.append("")
 
     # Added
-    lines.append("## Animals ADDED to Adopets")
+    lines.append("-------------------------------------------------------------")
+    lines.append("## Profiles ADDED to Adopets")
     if animals_added:
-        for rec in animals_added:
+        for rec in sorted(animals_added, key=species_sort_key):
             lines.append(format_animal_line(rec))
     else:
         lines.append("- None")
     lines.append("")
 
     # Removed
-    lines.append("## Animals REMOVED from Adopets")
+    lines.append("## Profiles REMOVED from Adopets")
     if animals_removed:
-        for rec in animals_removed:
+        for rec in sorted(animals_removed, key=species_sort_key):
             lines.append(format_animal_line(rec))
     else:
         lines.append("- None")
+    lines.append("-------------------------------------------------------------")
     lines.append("")
 
     # Split changed animals into:
@@ -155,7 +183,9 @@ def make_markdown_report(diff: dict) -> str:
     location_changes = []
 
     for rec in animals_changed:
-        has_trait_change = bool(rec.get("characteristics_added") or rec.get("characteristics_removed"))
+        has_trait_change = bool(
+            rec.get("characteristics_added") or rec.get("characteristics_removed")
+        )
         has_bio_change = bool(rec.get("description_changed"))
         has_location_change = bool(rec.get("location_changed") or rec.get("location_change_type"))
 
@@ -167,33 +197,118 @@ def make_markdown_report(diff: dict) -> str:
             location_changes.append(rec)
 
     # Trait changes
-    lines.append("## Trait Changes")
+    lines.append("-------------------------------------------------------------")
     if trait_changes:
-        for rec in trait_changes:
-            animal_id = rec.get("animal_id", "?")
-            name = rec.get("name", "?")
-            species = rec.get("species", "")
-            lines.append(f"### [{animal_id}] {name}, ({species})")
+        # Split into two views: traits added vs traits removed
+        traits_added = []
+        traits_removed = []
 
+        for rec in trait_changes:
             added = rec.get("characteristics_added") or []
             removed = rec.get("characteristics_removed") or []
 
             if added:
-                added_str = ", ".join(added)
-                lines.append(f"- **Added:** {added_str}")
+                traits_added.append(rec)
             if removed:
-                removed_str = ", ".join(removed)
-                lines.append(f"- **Removed:** {removed_str}")
-            if not added and not removed:
-                lines.append("- (No net trait change?)")
+                traits_removed.append(rec)
 
-            lines.append("")  # blank line after each animal
+        # --- Traits ADDED ---
+        lines.append("## Traits ADDED to Adopets")
+        if traits_added:
+            for rec in sorted(traits_added, key=species_sort_key):
+                lines.append(format_animal_line(rec))
+                added = rec.get("characteristics_added") or []
+                added_str = ", ".join(added)
+                lines.append(f"  - **Added traits:** {added_str}")
+            lines.append("")
+        else:
+            lines.append("- None")
+            lines.append("")
+            
+        # --- Traits REMOVED ---
+        lines.append("## Traits REMOVED from Adopets")
+        if traits_removed:
+            for rec in sorted(traits_removed, key=species_sort_key):
+                lines.append(format_animal_line(rec))
+                removed = rec.get("characteristics_removed") or []
+                removed_str = ", ".join(removed)
+                lines.append(f"  - **Removed traits:** {removed_str}")
+            # lines.append("")
+        else:
+            lines.append("- None")
+            lines.append("")
+        
+
+    else:
+        lines.append("- None")
+    lines.append("-------------------------------------------------------------")
+    lines.append("")
+    
+    # Bio changes → now split into three buckets
+    lines.append("-------------------------------------------------------------")
+
+    bios_added: list[dict] = []
+    bios_removed: list[dict] = []
+    bios_changed: list[dict] = []
+
+    for rec in bio_changes:
+        old_desc = rec.get("description_old") or ""
+        new_desc = rec.get("description_new") or ""
+
+        old_has = bool(old_desc.strip())
+        new_has = bool(new_desc.strip())
+
+        if not old_has and new_has:
+            # New bio added
+            bios_added.append(rec)
+        elif old_has and not new_has:
+            # Bio removed
+            bios_removed.append(rec)
+        elif old_has and new_has:
+            # Bio edited (both non-empty)
+            delta_pct, _, _ = summarize_bio_change(old_desc, new_desc)
+            # Make a shallow copy so we don't mutate the original diff structure
+            rec_copy = dict(rec)
+            rec_copy["bio_delta_pct"] = delta_pct
+            bios_changed.append(rec_copy)
+        # If both empty, technically something flipped around, but we already
+        # know description_changed=True so you probably won't see this case much.
+
+    # Bios added
+    lines.append("## Bios ADDED to Adopets")
+    if bios_added:
+        for rec in sorted(bios_added, key=species_sort_key):
+            lines.append(format_animal_line(rec))
+        lines.append("")
+    else:
+        lines.append("- None")
+        lines.append("")
+        
+    # Bios removed
+    lines.append("## Bios REMOVED from Adopets")
+    if bios_removed:
+        for rec in sorted(bios_removed, key=species_sort_key):
+            lines.append(format_animal_line(rec))
+        lines.append("")
     else:
         lines.append("- None")
         lines.append("")
 
+    # Bios changed (edited / rewritten)
+    lines.append("## Bios CHANGED in Adopets")
+    if bios_changed:
+        for rec in sorted(bios_changed, key=species_sort_key):
+            pct = rec.get("bio_delta_pct")
+            pct_str = f" (Bio changed by ~{pct}%)" if pct is not None else ""
+            lines.append(format_animal_line(rec) + pct_str)
+        lines.append("")
+    else:
+        lines.append("- None")
+        lines.append("-------------------------------------------------------------")
+        lines.append("")
+
     # Location changes
-    lines.append("## Location Changes")
+    lines.append("-------------------------------------------------------------")
     if location_changes:
         # Bucket by type for easier reading
         went_to_foster = []
@@ -213,9 +328,9 @@ def make_markdown_report(diff: dict) -> str:
                 other_loc.append(rec)
 
         def add_location_section(title: str, records: list[dict]):
-            lines.append(f"### {title}")
+            lines.append(f"## {title}")
             if records:
-                for r in records:
+                for r in sorted(records, key=species_sort_key):
                     lines.append(format_animal_line(r))
                     old_loc = r.get("location_old") or "Unknown"
                     new_loc = r.get("location_new") or "Unknown"
@@ -225,54 +340,17 @@ def make_markdown_report(diff: dict) -> str:
                 lines.append("- None")
                 lines.append("")
 
-        add_location_section("Went to Foster", went_to_foster)
-        add_location_section("Returned from Foster", returned_from_foster)
-        add_location_section("Kennel Changes", kennel_moves)
-        add_location_section("Other / Uncategorized Location Changes", other_loc)
+        lines.append("-------------------------------------------------------------")
+        add_location_section("LOCATION CHANGE: Went to Foster", went_to_foster)
+        add_location_section("LOCATION CHANGE: Returned from Foster", returned_from_foster)
+        add_location_section("LOCATION CHANGE: Moved Kennels", kennel_moves)
+        add_location_section("LOCATION CHANGE: Other", other_loc)
+        lines.append("-------------------------------------------------------------")
+        lines.append("")
 
     else:
         lines.append("- None")
-        lines.append("")
-    
-    # Bio changes
-    lines.append("## Bio Changes")
-    if bio_changes:
-        for rec in bio_changes:
-            animal_id = rec.get("animal_id", "?")
-            name = rec.get("name", "?")
-            lines.append(f"### [{animal_id}] {name}")
-
-            old_desc = rec.get("description_old") or ""
-            new_desc = rec.get("description_new") or ""
-
-            delta_pct, old_snip, new_snip = summarize_bio_change(old_desc, new_desc)
-
-            # Handle special 100% cases cleanly
-            if delta_pct >= 99.0:  # basically completely different
-                if not old_desc.strip() and new_desc.strip():
-                    # New bio added where previously empty
-                    lines.append("- **Bio added.**")
-                elif old_desc.strip() and not new_desc.strip():
-                    # Bio was removed entirely
-                    lines.append("- **Bio removed.**")
-                else:
-                    # Both non-empty but totally rewritten
-                    lines.append("- **Bio rewritten.**")
-                lines.append("")
-                continue  # skip detailed snippets
-
-            # Normal (partial) bio changes
-            lines.append(f"- **Bio changed:** ~{delta_pct}% difference")
-
-            if old_snip:
-                lines.append("  - Old (changed portion):")
-                lines.append(f"    > {old_snip}")
-            if new_snip:
-                lines.append("  - New (changed portion):")
-                lines.append(f"    > {new_snip}")
-            lines.append("")
-    else:
-        lines.append("None")
+        lines.append("-------------------------------------------------------------")
         lines.append("")
 
     return "\n".join(lines)
