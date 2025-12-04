@@ -80,6 +80,12 @@ def fetch_list(session: requests.Session, limit=700):
         }
 
         resp = session.post(FIND_URL, json=payload, timeout=60)
+        if resp.status_code in (401, 403):
+            raise SystemExit(
+                f"AUTH ERROR: Adopets returned {resp.status_code}. "
+                "Your bearer token is probably expired. "
+                "Grab a fresh token from DevTools and update ADOPETS_BEARER in your .env / repo secrets."
+            )
         resp.raise_for_status()
         data = resp.json()
 
@@ -105,6 +111,13 @@ def fetch_detail(uuid: str, session: requests.Session):
     payload["pet_uuid"] = uuid
 
     resp = session.post(DETAIL_URL, json=payload, timeout=60)
+    if resp.status_code in (401, 403):
+            raise SystemExit(
+                f"AUTH ERROR: Adopets returned {resp.status_code}. "
+                "Your bearer token is probably expired. "
+                "Grab a fresh token from DevTools and update ADOPETS_BEARER in your .env / repo secrets."
+            )
+    
     resp.raise_for_status()
     data = resp.json()
 
