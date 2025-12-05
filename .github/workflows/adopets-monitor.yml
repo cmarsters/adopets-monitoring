@@ -65,7 +65,16 @@ jobs:
           from pathlib import Path
           from compare_snapshots import compare_snapshots
 
-          snaps = sorted(Path("snapshots").glob("*.json"))
+          snap_dir = Path("snapshots")
+
+          # Only keep REAL snapshots: timestamp files starting with a digit.
+          snap_files = [
+              p for p in snap_dir.glob("*.json")
+              if p.name[0].isdigit()
+          ]
+
+          snaps = sorted(snap_files)
+
           if len(snaps) < 2:
               print("Not enough snapshots to compare; skipping diff/email.")
               raise SystemExit(0)
@@ -75,7 +84,7 @@ jobs:
 
           diff = compare_snapshots(old_path, new_path)
 
-          out_path = Path("snapshots/latest_diff.json")
+          out_path = snap_dir / "latest_diff.json"
           out_path.write_text(
               json.dumps(diff, indent=2, ensure_ascii=False),
               encoding="utf-8"
