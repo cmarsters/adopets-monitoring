@@ -6,14 +6,12 @@ from datetime import datetime
 from pathlib import Path
 import os
 import requests
-from dotenv import load_dotenv 
+from dotenv import load_dotenv
+from adopets_client import AdopetsClient
 
 load_dotenv()
 SNAPSHOT_DIR = Path(os.environ.get("SNAPSHOT_DIR", "snapshots"))
 SNAPSHOT_DIR.mkdir(exist_ok=True)
-ADOPETS_API_TOKEN = os.environ.get("ADOPETS_API_TOKEN")
-if not ADOPETS_API_TOKEN:
-    raise RuntimeError("Missing ADOPETS_API_TOKEN environment variable")
 
 # === CONFIG ===
 FIND_URL = "https://service.api.prd.adopets.app/adopter/pet/find?lang=en"
@@ -52,72 +50,26 @@ DETAIL_PAYLOAD_TEMPLATE = {
     "tracker_uuid": "20726cce-8281-4909-9c4e-0272c989bc19",
 }
 
-HEADERS = {
-    "Accept": "application/json",
-    "Authorization": f"Bearer {ADOPETS_API_TOKEN}",
-}
+SHELTER_UUID = "8a047e71-c644-45e3-9a9c-e7b83d18c48f"
 
 
-def fetch_list(session: requests.Session, limit=700):
-    """Fetch the list of adoptable animals (summary data)."""
-    all_results = []
-    offset = 0
-
-    while True:
-        payload = {
-            "limit": limit,
-            "offset": offset,
-            "organization_pet": {
-                "specie_uuid": [],
-                "breed_uuid": [],
-                "size_key": [],
-                "sex_key": [],
-                "age_key": [],
-            },
-            "origin_key": "ORGANIZATION_PAGE",
-            "shelter_uuid": "8a047e71-c644-45e3-9a9c-e7b83d18c48f",
-            "user_interaction": False,
-        }
-
-        resp = session.post(FIND_URL, json=payload, timeout=60)
-        if resp.status_code in (401, 403):
-            raise SystemExit(
-                f"AUTH ERROR: Adopets returned {resp.status_code}. "
-                "Your bearer token is probably expired. "
-                "Grab a fresh token from DevTools and update ADOPETS_BEARER in your .env / repo secrets."
-            )
-        resp.raise_for_status()
-        data = resp.json()
-
-        if data.get("data") is None:
-            raise RuntimeError(f"API error: {data.get('message')}")
-
-        batch = data["data"]["result"]
-        if not batch:  # no more animals
-            break
-
-        all_results.extend(batch)
-        if len(batch) < limit:
-            break  # last page
-
-        offset += limit
-
-    return all_results  # list of {"organization_pet": {...}}
+def fetch_list(client: AdopetsClient, limit=700):
+    """Fetch the list of adoptable animals (summary data) using AdopetsClient."""
+    return client.fetch_all_pets(batch_size=limit)
 
 
-def fetch_detail(uuid: str, session: requests.Session):
+def fetch_detail(uuid: str, client: AdopetsClient):
     """Fetch full detail (including characteristics) for one dog."""
     payload = copy.deepcopy(DETAIL_PAYLOAD_TEMPLATE)
     payload["pet_uuid"] = uuid
 
-    resp = session.post(DETAIL_URL, json=payload, timeout=60)
-    if resp.status_code in (401, 403):
-            raise SystemExit(
-                f"AUTH ERROR: Adopets returned {resp.status_code}. "
-                "Your bearer token is probably expired. "
-                "Grab a fresh token from DevTools and update ADOPETS_BEARER in your .env / repo secrets."
-            )
-    
+    token = client.get_token()
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {token}",
+    }
+
+    resp = requests.post(DETAIL_URL, json=payload, headers=headers, timeout=60)
     resp.raise_for_status()
     data = resp.json()
 
@@ -202,27 +154,27 @@ def normalize_record(list_item: dict, detail_data: dict) -> dict:
 
 
 def main():
-    with requests.Session() as session:
-        session.headers.update(HEADERS)
-        list_items = fetch_list(session)
-        print(f"Got {len(list_items)} animals from Adopets")
+    client = AdopetsClient(shelter_uuid=SHELTER_UUID)
 
-        records = [None] * len(list_items)
+    list_items = fetch_list(client)
+    print(f"Got {len(list_items)} animals from Adopets")
 
-        def build_record(idx, item):
-            uuid = item["organization_pet"]["uuid"]
-            detail = fetch_detail(uuid, session)
-            return idx, normalize_record(item, detail)
+    records = [None] * len(list_items)
 
-        # Use threads to fetch pet details concurrently for better throughput.
-        with ThreadPoolExecutor(max_workers=16) as executor:
-            futures = {
-                executor.submit(build_record, idx, item): idx
-                for idx, item in enumerate(list_items)
-            }
-            for future in as_completed(futures):
-                idx, record = future.result()
-                records[idx] = record
+    def build_record(idx, item):
+        uuid = item["organization_pet"]["uuid"]
+        detail = fetch_detail(uuid, client)
+        return idx, normalize_record(item, detail)
+
+    # Use threads to fetch pet details concurrently for better throughput.
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        futures = {
+            executor.submit(build_record, idx, item): idx
+            for idx, item in enumerate(list_items)
+        }
+        for future in as_completed(futures):
+            idx, record = future.result()
+            records[idx] = record
 
     now = datetime.now()
     stamp = now.strftime("%Y-%m-%dT%H-%M-%S")  # e.g. 2025-12-03T14-52-10

@@ -19,7 +19,6 @@ jobs:
       AAC_EMAIL_USER: ${{ secrets.AAC_EMAIL_USER }}
       AAC_EMAIL_PASS: ${{ secrets.AAC_EMAIL_PASS }}
       AAC_EMAIL_SUBJECT_PREFIX: ${{ secrets.AAC_EMAIL_SUBJECT_PREFIX }}
-      ADOPETS_API_TOKEN: ${{ secrets.ADOPETS_API_TOKEN }}
       
     steps:
       - name: Check out repo
