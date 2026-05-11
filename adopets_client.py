@@ -50,27 +50,64 @@ class AdopetsClient:
 
     def _fetch_new_token(self) -> TokenInfo:
         """Fetch a fresh token from the API."""
-        response = requests.post(
-            f"{self.API_BASE}/adopter/auth/session-request",
-            params={"lang": "en"},
-            json={"system_api_key": self.SYSTEM_API_KEY},
-            headers={"Content-Type": "application/json"},
-        )
-        response.raise_for_status()
 
-        data = response.json()
-        access_key = data["data"]["access_key"]
+        max_attempts = 5
 
-        # Parse the JWT to get issued-at time
-        payload = self._parse_jwt_payload(access_key)
-        issued_at = payload.get("iat", time.time())
-        expires_at = issued_at + self.TOKEN_LIFETIME_SECONDS
+        for attempt in range(1, max_attempts +1):
+            try:
+                response = requests.post(
+                    f"{self.API_BASE}/adopter/auth/session-request",
+                    params={"lang": "en"},
+                    json={"system_api_key": self.SYSTEM_API_KEY},
+                    headers={"Content-Type": "application/json"},
+                    timeout=30,
+                )
+                response.raise_for_status()
+    
+                data = response.json()
+                access_key = data["data"]["access_key"]
 
-        return TokenInfo(
-            access_key=access_key,
-            issued_at=issued_at,
-            expires_at=expires_at,
-        )
+                # Parse the JWT to get issued-at time
+                payload = self._parse_jwt_payload(access_key)
+                issued_at = payload.get("iat", time.time())
+                expires_at = issued_at + self.TOKEN_LIFETIME_SECONDS
+
+                return TokenInfo(
+                    access_key=access_key,
+                    issued_at=issued_at,
+                    expires_at=expires_at,
+                )
+            
+            except requests.HTTPError as e:
+                status = e.response.status_code if e.response else None
+
+                # Retry:
+                if status in (500, 502, 503, 504):
+                    wait = attempt * 15
+                    print(
+                        f"Token fetch failed with HTTP {status}. "
+                        f"Retrying in {wait}s "
+                        f"(attempt {attempt}/{max_attempts})..."
+                    )
+    
+                    time.sleep(wait)
+                    continue
+    
+                # Non-retryable HTTP errors
+                raise
+    
+            except requests.RequestException as e:
+                wait = attempt * 15
+                print(
+                    f"Network error fetching token: {e}. "
+                    f"Retrying in {wait}s "
+                    f"(attempt {attempt}/{max_attempts})..."
+                )
+    
+                time.sleep(wait)
+    
+        raise RuntimeError("Failed to fetch token after multiple attempts.")
+    
 
     def get_token(self) -> str:
         """Get a valid token, refreshing if necessary."""
